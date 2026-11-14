@@ -1,11 +1,12 @@
 package com.securityguard.patrol.domain;
 
-import com.securityguard.shared.entity.AuditableEntity;
-import com.securityguard.site.domain.Site;
+import com.securityguard.persistence.AuditableEntity;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+
+import java.util.UUID;
 
 /** site is kept directly on the route so "points must belong to the same site" is a simple equality check. */
 @Entity
@@ -15,9 +16,8 @@ import lombok.Setter;
 @NoArgsConstructor
 public class PatrolRoute extends AuditableEntity {
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "site_id", nullable = false)
-    private Site site;
+    @Column(name = "site_id", nullable = false)
+    private UUID siteId;
 
     @Column(name = "name", nullable = false, length = 200)
     private String name;

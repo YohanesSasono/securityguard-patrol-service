@@ -1,12 +1,13 @@
 package com.securityguard.patrol.presentation;
 
 import com.securityguard.patrol.application.PatrolRouteService;
+import com.securityguard.patrol.application.port.in.PatrolRouteUseCase;
 import com.securityguard.patrol.domain.PatrolRoute;
 import com.securityguard.patrol.domain.RouteType;
 import com.securityguard.patrol.presentation.dto.*;
+import com.securityguard.security.AuthenticatedUser;
+import com.securityguard.security.CurrentUserProvider;
 import com.securityguard.shared.exception.BusinessValidationException;
-import com.securityguard.shared.security.AuthenticatedUser;
-import com.securityguard.shared.security.CurrentUserProvider;
 import com.securityguard.shared.web.PageResponse;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Pageable;
@@ -23,10 +24,10 @@ import java.util.UUID;
 @RequestMapping("/api/v1/patrol-routes")
 public class PatrolRouteController {
 
-    private final PatrolRouteService patrolRouteService;
+    private final PatrolRouteUseCase patrolRouteService;
     private final CurrentUserProvider currentUserProvider;
 
-    public PatrolRouteController(PatrolRouteService patrolRouteService, CurrentUserProvider currentUserProvider) {
+    public PatrolRouteController(PatrolRouteUseCase patrolRouteService, CurrentUserProvider currentUserProvider) {
         this.patrolRouteService = patrolRouteService;
         this.currentUserProvider = currentUserProvider;
     }

@@ -1,5 +1,7 @@
 package com.securityguard.patrol.presentation.dto;
 
+import com.securityguard.patrol.domain.PatrolPoint;
+
 import java.time.Instant;
 import java.util.UUID;
 
@@ -12,7 +14,7 @@ public record PatrolPointResponse(
         Double lat = point.getLocation() != null ? point.getLocation().getY() : null;
         Double lng = point.getLocation() != null ? point.getLocation().getX() : null;
         return new PatrolPointResponse(
-                point.getId(), point.getSite().getId(), point.getName(), point.getType().name(),
+                point.getId(), point.getSiteId(), point.getName(), point.getType().name(),
                 point.getNfcUid(), lat, lng, point.getInspectionStatus(), point.getInspectionNotes(),
                 point.getPhotoPath(), point.isActive(), point.getCreatedAt());
     }

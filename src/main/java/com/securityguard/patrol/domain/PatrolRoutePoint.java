@@ -1,6 +1,6 @@
 package com.securityguard.patrol.domain;
 
-import com.securityguard.shared.entity.BaseEntity;
+import com.securityguard.persistence.AuditableEntity;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -11,7 +11,7 @@ import lombok.Setter;
 @Getter
 @Setter
 @NoArgsConstructor
-public class PatrolRoutePoint extends BaseEntity {
+public class PatrolRoutePoint extends AuditableEntity {
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "route_id", nullable = false)

@@ -1,3 +1,43 @@
 spring:
   application:
     name: securityguard-patrol-service
+  datasource:
+    url: jdbc:postgresql://localhost:5432/securityguard
+    username: postgres.snlmejfrttlsyrsanwfq
+    password: SecGuard@18
+    driver-class-name: org.postgresql.Driver
+    jpa:
+      database-platform: org.hibernate.dialect.PostgreSQLDialect
+      hibernate:
+        ddl-auto: validate
+      properties:
+        hibernate:
+          default_schema: patrol
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # identity-service publishes its RS256 public key here
+          jwk-set-uri: ${JWT_JWK_SET_URI:http://localhost:8080/oauth2/jwks}
+          # must equal identity's app.oauth2.public-url
+          issuer-uri: ${JWT_ISSUER_URI:http://localhost:8080}
+
+server:
+  # 8080 is identity-service
+  port: ${SERVER_PORT:8083}
+
+services:
+  identity:
+    # owns companies, sites and users; patrol stores only their ids
+    base-url: ${IDENTITY_SERVICE_URL:http://localhost:8080}
+    site-cache-ttl: 45s
+
+app:
+  resilience:
+    breakers:
+      identity:
+        window-size: 20
+        minimum-calls: 10
+        failure-rate-threshold: 50
+        open-seconds: 15
+        half-open-permitted-calls: 2

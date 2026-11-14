@@ -1,5 +1,7 @@
 package com.securityguard.patrol.presentation.dto;
 
+import com.securityguard.patrol.domain.PatrolRoutePoint;
+
 import java.util.UUID;
 
 public record RoutePointResponse(UUID id, UUID pointId, String pointName, String pointType, int sequence, boolean required) {

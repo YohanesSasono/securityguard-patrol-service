@@ -2,13 +2,13 @@ package com.securityguard.patrol.application;
 
 import com.securityguard.patrol.domain.PatrolPoint;
 import com.securityguard.patrol.domain.repository.PatrolPointRepository;
+import com.securityguard.patrol.application.port.in.PatrolPointUseCase;
 import com.securityguard.patrol.domain.PatrolPointType;
 import com.securityguard.shared.exception.BusinessValidationException;
 import com.securityguard.shared.exception.ConflictException;
 import com.securityguard.shared.exception.ResourceNotFoundException;
-import com.securityguard.shared.geo.GeoPointFactory;
-import com.securityguard.site.domain.Site;
-import com.securityguard.site.domain.SiteRepository;
+import com.securityguard.patrol.application.port.out.SiteLookupPort;
+import com.securityguard.patrol.domain.GeoPointFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -27,14 +27,14 @@ import java.util.UUID;
  */
 @Service
 @Transactional
-public class PatrolPointService {
+public class PatrolPointService implements PatrolPointUseCase {
 
     private final PatrolPointRepository patrolPointRepository;
-    private final SiteRepository siteRepository;
+    private final SiteLookupPort siteLookup;
 
-    public PatrolPointService(PatrolPointRepository patrolPointRepository, SiteRepository siteRepository) {
+    public PatrolPointService(PatrolPointRepository patrolPointRepository, SiteLookupPort siteLookup) {
         this.patrolPointRepository = patrolPointRepository;
-        this.siteRepository = siteRepository;
+        this.siteLookup = siteLookup;
     }
 
     public record CreatePointCommand(UUID siteId, String name, PatrolPointType type, String nfcUid,
@@ -47,29 +47,30 @@ public class PatrolPointService {
 
     @Transactional(readOnly = true)
     public Page<PatrolPoint> list(UUID companyId, UUID siteId, Pageable pageable) {
-        return siteId != null
-                ? patrolPointRepository.findBySiteIdAndSiteCompanyId(siteId, companyId, pageable)
-                : patrolPointRepository.findBySiteCompanyId(companyId, pageable);
+        if (siteId != null) {
+            siteLookup.requireSite(companyId, siteId);
+            return patrolPointRepository.findBySiteId(siteId, pageable);
+        }
+        return patrolPointRepository.findBySiteIdIn(siteLookup.siteIdsOf(companyId), pageable);
     }
 
     @Transactional(readOnly = true)
     public PatrolPoint getById(UUID id, UUID companyId) {
-        return patrolPointRepository.findByIdAndSiteCompanyId(id, companyId)
+        return patrolPointRepository.findByIdAndSiteIdIn(id, siteLookup.siteIdsOf(companyId))
                 .orElseThrow(() -> new ResourceNotFoundException("Patrol point not found"));
     }
 
     public PatrolPoint create(UUID companyId, CreatePointCommand command) {
         validateNfcUidRule(command.type(), command.nfcUid());
 
-        Site site = siteRepository.findByIdAndCompanyId(command.siteId(), companyId)
-                .orElseThrow(() -> new ResourceNotFoundException("Site not found"));
+        siteLookup.requireSite(companyId, command.siteId());
 
         if (command.type() == PatrolPointType.CHECKPOINT && patrolPointRepository.existsByNfcUid(command.nfcUid())) {
             throw new ConflictException("NFC UID is already assigned to another patrol point");
         }
 
         PatrolPoint point = new PatrolPoint();
-        point.setSite(site);
+        point.setSiteId(command.siteId());
         point.setName(command.name());
         point.setType(command.type());
         point.setNfcUid(command.type() == PatrolPointType.CHECKPOINT ? command.nfcUid() : null);

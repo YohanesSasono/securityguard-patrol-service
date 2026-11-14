@@ -2,13 +2,13 @@ package com.securityguard.patrol.application;
 
 import com.securityguard.patrol.domain.*;
 import com.securityguard.patrol.domain.repository.PatrolPointRepository;
+import com.securityguard.patrol.application.port.in.PatrolRouteUseCase;
 import com.securityguard.patrol.domain.repository.PatrolRoutePointRepository;
 import com.securityguard.patrol.domain.repository.PatrolRouteRepository;
+import com.securityguard.patrol.application.port.out.SiteLookupPort;
 import com.securityguard.shared.exception.BusinessValidationException;
 import com.securityguard.shared.exception.ConflictException;
 import com.securityguard.shared.exception.ResourceNotFoundException;
-import com.securityguard.site.domain.Site;
-import com.securityguard.site.domain.SiteRepository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -26,21 +26,21 @@ import java.util.UUID;
  */
 @Service
 @Transactional
-public class PatrolRouteService {
+public class PatrolRouteService implements PatrolRouteUseCase {
 
     private final PatrolRouteRepository patrolRouteRepository;
     private final PatrolRoutePointRepository patrolRoutePointRepository;
     private final PatrolPointRepository patrolPointRepository;
-    private final SiteRepository siteRepository;
+    private final SiteLookupPort siteLookup;
 
     public PatrolRouteService(PatrolRouteRepository patrolRouteRepository,
                                PatrolRoutePointRepository patrolRoutePointRepository,
                                PatrolPointRepository patrolPointRepository,
-                               SiteRepository siteRepository) {
+                               SiteLookupPort siteLookup) {
         this.patrolRouteRepository = patrolRouteRepository;
         this.patrolRoutePointRepository = patrolRoutePointRepository;
         this.patrolPointRepository = patrolPointRepository;
-        this.siteRepository = siteRepository;
+        this.siteLookup = siteLookup;
     }
 
     public record CreateRouteCommand(UUID siteId, String name, RouteType type) {
@@ -54,12 +54,12 @@ public class PatrolRouteService {
 
     @Transactional(readOnly = true)
     public Page<PatrolRoute> list(UUID companyId, Pageable pageable) {
-        return patrolRouteRepository.findBySiteCompanyId(companyId, pageable);
+        return patrolRouteRepository.findBySiteIdIn(siteLookup.siteIdsOf(companyId), pageable);
     }
 
     @Transactional(readOnly = true)
     public PatrolRoute getById(UUID id, UUID companyId) {
-        return patrolRouteRepository.findByIdAndSiteCompanyId(id, companyId)
+        return patrolRouteRepository.findByIdAndSiteIdIn(id, siteLookup.siteIdsOf(companyId))
                 .orElseThrow(() -> new ResourceNotFoundException("Patrol route not found"));
     }
 
@@ -70,11 +70,10 @@ public class PatrolRouteService {
     }
 
     public PatrolRoute create(UUID companyId, CreateRouteCommand command) {
-        Site site = siteRepository.findByIdAndCompanyId(command.siteId(), companyId)
-                .orElseThrow(() -> new ResourceNotFoundException("Site not found"));
+        siteLookup.requireSite(companyId, command.siteId());
 
         PatrolRoute route = new PatrolRoute();
-        route.setSite(site);
+        route.setSiteId(command.siteId());
         route.setName(command.name());
         route.setType(command.type());
         route.setActive(true);
@@ -103,10 +102,10 @@ public class PatrolRouteService {
 
     public PatrolRoutePoint addPoint(UUID routeId, UUID companyId, AddRoutePointCommand command) {
         PatrolRoute route = getById(routeId, companyId);
-        PatrolPoint point = patrolPointRepository.findByIdAndSiteCompanyId(command.pointId(), companyId)
+        PatrolPoint point = patrolPointRepository.findByIdAndSiteIdIn(command.pointId(), siteLookup.siteIdsOf(companyId))
                 .orElseThrow(() -> new ResourceNotFoundException("Patrol point not found"));
 
-        if (!point.getSite().getId().equals(route.getSite().getId())) {
+        if (!point.getSiteId().equals(route.getSiteId())) {
             throw new BusinessValidationException("Patrol point must belong to the same site as the route");
         }
         if (patrolRoutePointRepository.existsByRouteIdAndSequence(routeId, command.sequence())) {
@@ -129,6 +128,7 @@ public class PatrolRouteService {
      */
     public List<PatrolRoutePoint> reorderPoints(UUID routeId, UUID companyId, List<AddRoutePointCommand> orderedPoints) {
         PatrolRoute route = getById(routeId, companyId);
+        var siteIds = siteLookup.siteIdsOf(companyId);
 
         List<PatrolRoutePoint> existing = patrolRoutePointRepository.findByRouteIdOrderBySequenceAsc(routeId);
         patrolRoutePointRepository.deleteAll(existing);
@@ -136,9 +136,9 @@ public class PatrolRouteService {
 
         return orderedPoints.stream()
                 .map(cmd -> {
-                    PatrolPoint point = patrolPointRepository.findByIdAndSiteCompanyId(cmd.pointId(), companyId)
+                    PatrolPoint point = patrolPointRepository.findByIdAndSiteIdIn(cmd.pointId(), siteIds)
                             .orElseThrow(() -> new ResourceNotFoundException("Patrol point not found: " + cmd.pointId()));
-                    if (!point.getSite().getId().equals(route.getSite().getId())) {
+                    if (!point.getSiteId().equals(route.getSiteId())) {
                         throw new BusinessValidationException(
                                 "Patrol point must belong to the same site as the route: " + cmd.pointId());
                     }

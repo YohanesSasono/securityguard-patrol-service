@@ -1,7 +1,6 @@
 package com.securityguard.patrol.domain;
 
-import com.securityguard.shared.entity.AuditableEntity;
-import com.securityguard.user.domain.User;
+import com.securityguard.persistence.AuditableEntity;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -9,6 +8,7 @@ import lombok.Setter;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.util.UUID;
 
 /**
  * @Version guards against a schedule being cancelled by an admin at the same
@@ -30,9 +30,8 @@ public class PatrolSchedule extends AuditableEntity {
     @JoinColumn(name = "route_id", nullable = false)
     private PatrolRoute route;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "assigned_user_id", nullable = false)
-    private User assignedUser;
+    @Column(name = "assigned_user_id", nullable = false)
+    private UUID assignedUserId;
 
     @Column(name = "scheduled_date", nullable = false)
     private LocalDate scheduledDate;

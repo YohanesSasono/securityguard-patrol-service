@@ -1,12 +1,13 @@
 package com.securityguard.patrol.presentation;
 
 import com.securityguard.patrol.application.PatrolService;
+import com.securityguard.patrol.application.port.in.PatrolUseCase;
 import com.securityguard.patrol.domain.Patrol;
 import com.securityguard.patrol.presentation.dto.CreatePatrolRequest;
 import com.securityguard.patrol.presentation.dto.PatrolResponse;
 import com.securityguard.patrol.presentation.dto.UpdatePatrolRequest;
-import com.securityguard.shared.security.AuthenticatedUser;
-import com.securityguard.shared.security.CurrentUserProvider;
+import com.securityguard.security.AuthenticatedUser;
+import com.securityguard.security.CurrentUserProvider;
 import com.securityguard.shared.web.PageResponse;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Pageable;
@@ -23,10 +24,10 @@ import java.util.UUID;
 @RequestMapping("/api/v1/patrols")
 public class PatrolController {
 
-    private final PatrolService patrolService;
+    private final PatrolUseCase patrolService;
     private final CurrentUserProvider currentUserProvider;
 
-    public PatrolController(PatrolService patrolService, CurrentUserProvider currentUserProvider) {
+    public PatrolController(PatrolUseCase patrolService, CurrentUserProvider currentUserProvider) {
         this.patrolService = patrolService;
         this.currentUserProvider = currentUserProvider;
     }

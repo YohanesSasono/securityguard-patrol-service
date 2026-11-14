@@ -1,13 +1,13 @@
 package com.securityguard.patrol.domain;
 
-import com.securityguard.shared.entity.AuditableEntity;
-import com.securityguard.user.domain.User;
+import com.securityguard.persistence.AuditableEntity;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.time.Instant;
+import java.util.UUID;
 
 /**
  * @Version guards the finalization race: two point completions racing to be
@@ -31,9 +31,9 @@ public class PatrolExecution extends AuditableEntity {
     @JoinColumn(name = "schedule_id", nullable = false)
     private PatrolSchedule schedule;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "user_id", nullable = false)
-    private User user;
+    /** Guard who runs the patrol (identity-service user id). */
+    @Column(name = "user_id", nullable = false)
+    private UUID userId;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 20)

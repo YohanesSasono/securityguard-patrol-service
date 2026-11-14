@@ -1,14 +1,16 @@
 package com.securityguard.patrol.presentation;
 
 import com.securityguard.patrol.application.PatrolScheduleService;
+import com.securityguard.patrol.application.port.in.PatrolScheduleUseCase;
+import com.securityguard.patrol.application.port.out.UserLookupPort;
 import com.securityguard.patrol.domain.PatrolSchedule;
 import com.securityguard.patrol.domain.ScheduleStatus;
 import com.securityguard.patrol.presentation.dto.CreatePatrolScheduleRequest;
 import com.securityguard.patrol.presentation.dto.PatrolScheduleResponse;
 import com.securityguard.patrol.presentation.dto.UpdatePatrolScheduleRequest;
+import com.securityguard.security.AuthenticatedUser;
+import com.securityguard.security.CurrentUserProvider;
 import com.securityguard.shared.exception.BusinessValidationException;
-import com.securityguard.shared.security.AuthenticatedUser;
-import com.securityguard.shared.security.CurrentUserProvider;
 import com.securityguard.shared.web.PageResponse;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Pageable;
@@ -18,6 +20,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -28,12 +32,15 @@ import java.util.UUID;
 @RequestMapping("/api/v1/patrol-schedules")
 public class PatrolScheduleController {
 
-    private final PatrolScheduleService patrolScheduleService;
+    private final PatrolScheduleUseCase patrolScheduleService;
     private final CurrentUserProvider currentUserProvider;
+    private final UserLookupPort userLookup;
 
-    public PatrolScheduleController(PatrolScheduleService patrolScheduleService, CurrentUserProvider currentUserProvider) {
+    public PatrolScheduleController(PatrolScheduleUseCase patrolScheduleService, CurrentUserProvider currentUserProvider,
+                                    UserLookupPort userLookup) {
         this.patrolScheduleService = patrolScheduleService;
         this.currentUserProvider = currentUserProvider;
+        this.userLookup = userLookup;
     }
 
     @GetMapping
@@ -43,13 +50,16 @@ public class PatrolScheduleController {
         var page = Boolean.TRUE.equals(mine)
                 ? patrolScheduleService.listForUser(current.userId(), current.companyId(), pageable)
                 : patrolScheduleService.list(current.companyId(), pageable);
-        return ResponseEntity.ok(PageResponse.from(page.map(PatrolScheduleResponse::from)));
+        Map<UUID, String> names = userLookup.userNamesOf(current.companyId(),
+                page.getContent().stream().map(PatrolSchedule::getAssignedUserId).toList());
+        return ResponseEntity.ok(PageResponse.from(
+                page.map(s -> PatrolScheduleResponse.from(s, names.get(s.getAssignedUserId())))));
     }
 
     @GetMapping("/{scheduleId}")
     public ResponseEntity<PatrolScheduleResponse> getById(@PathVariable UUID scheduleId) {
         AuthenticatedUser current = currentUserProvider.getCurrentUser();
-        return ResponseEntity.ok(PatrolScheduleResponse.from(patrolScheduleService.getById(scheduleId, current.companyId())));
+        return ResponseEntity.ok(withName(patrolScheduleService.getById(scheduleId, current.companyId()), current));
     }
 
     @PostMapping
@@ -60,7 +70,7 @@ public class PatrolScheduleController {
                 request.patrolId(), request.routeId(), request.assignedUserId(),
                 request.scheduledDate(), request.startTime(), request.endTime());
         PatrolSchedule created = patrolScheduleService.create(current.companyId(), command);
-        return ResponseEntity.status(HttpStatus.CREATED).body(PatrolScheduleResponse.from(created));
+        return ResponseEntity.status(HttpStatus.CREATED).body(withName(created, current));
     }
 
     @PatchMapping("/{scheduleId}")
@@ -72,7 +82,7 @@ public class PatrolScheduleController {
         var command = new PatrolScheduleService.UpdateScheduleCommand(
                 request.assignedUserId(), request.scheduledDate(), request.startTime(), request.endTime(), status);
         PatrolSchedule updated = patrolScheduleService.update(scheduleId, current.companyId(), command);
-        return ResponseEntity.ok(PatrolScheduleResponse.from(updated));
+        return ResponseEntity.ok(withName(updated, current));
     }
 
     @DeleteMapping("/{scheduleId}")
@@ -81,6 +91,13 @@ public class PatrolScheduleController {
         AuthenticatedUser current = currentUserProvider.getCurrentUser();
         patrolScheduleService.cancel(scheduleId, current.companyId());
         return ResponseEntity.noContent().build();
+    }
+
+    /** Guard names live in identity-service; unresolvable names (e.g. officer callers) are returned as null. */
+    private PatrolScheduleResponse withName(PatrolSchedule schedule, AuthenticatedUser current) {
+        String name = userLookup.userNamesOf(current.companyId(), List.of(schedule.getAssignedUserId()))
+                .get(schedule.getAssignedUserId());
+        return PatrolScheduleResponse.from(schedule, name);
     }
 
     private ScheduleStatus parseStatus(String raw) {

@@ -1,14 +1,15 @@
 package com.securityguard.patrol.presentation;
 
 import com.securityguard.patrol.application.PatrolExecutionService;
+import com.securityguard.patrol.application.port.in.PatrolExecutionUseCase;
 import com.securityguard.patrol.domain.PatrolExecution;
 import com.securityguard.patrol.domain.PatrolExecutionPoint;
 import com.securityguard.patrol.presentation.dto.CompletePointRequest;
 import com.securityguard.patrol.presentation.dto.PatrolExecutionPointResponse;
 import com.securityguard.patrol.presentation.dto.PatrolExecutionResponse;
 import com.securityguard.patrol.presentation.dto.VerifyPointRequest;
-import com.securityguard.shared.security.AuthenticatedUser;
-import com.securityguard.shared.security.CurrentUserProvider;
+import com.securityguard.security.AuthenticatedUser;
+import com.securityguard.security.CurrentUserProvider;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -30,10 +31,10 @@ import java.util.UUID;
 @RestController
 public class PatrolExecutionController {
 
-    private final PatrolExecutionService patrolExecutionService;
+    private final PatrolExecutionUseCase patrolExecutionService;
     private final CurrentUserProvider currentUserProvider;
 
-    public PatrolExecutionController(PatrolExecutionService patrolExecutionService,
+    public PatrolExecutionController(PatrolExecutionUseCase patrolExecutionService,
                                       CurrentUserProvider currentUserProvider) {
         this.patrolExecutionService = patrolExecutionService;
         this.currentUserProvider = currentUserProvider;

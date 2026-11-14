@@ -1,6 +1,6 @@
 package com.securityguard.patrol.domain;
 
-import com.securityguard.shared.entity.AuditableEntity;
+import com.securityguard.persistence.AuditableEntity;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;

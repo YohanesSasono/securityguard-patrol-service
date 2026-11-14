@@ -2,9 +2,9 @@ package com.securityguard.patrol.application;
 
 import com.securityguard.patrol.domain.Patrol;
 import com.securityguard.patrol.domain.repository.PatrolRepository;
+import com.securityguard.patrol.application.port.in.PatrolUseCase;
+import com.securityguard.patrol.application.port.out.SiteLookupPort;
 import com.securityguard.shared.exception.ResourceNotFoundException;
-import com.securityguard.site.domain.Site;
-import com.securityguard.site.domain.SiteRepository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -14,14 +14,14 @@ import java.util.UUID;
 
 @Service
 @Transactional
-public class PatrolService {
+public class PatrolService implements PatrolUseCase {
 
     private final PatrolRepository patrolRepository;
-    private final SiteRepository siteRepository;
+    private final SiteLookupPort siteLookup;
 
-    public PatrolService(PatrolRepository patrolRepository, SiteRepository siteRepository) {
+    public PatrolService(PatrolRepository patrolRepository, SiteLookupPort siteLookup) {
         this.patrolRepository = patrolRepository;
-        this.siteRepository = siteRepository;
+        this.siteLookup = siteLookup;
     }
 
     public record CreatePatrolCommand(UUID siteId, String name, String description) {
@@ -32,21 +32,20 @@ public class PatrolService {
 
     @Transactional(readOnly = true)
     public Page<Patrol> list(UUID companyId, Pageable pageable) {
-        return patrolRepository.findBySiteCompanyId(companyId, pageable);
+        return patrolRepository.findBySiteIdIn(siteLookup.siteIdsOf(companyId), pageable);
     }
 
     @Transactional(readOnly = true)
     public Patrol getById(UUID id, UUID companyId) {
-        return patrolRepository.findByIdAndSiteCompanyId(id, companyId)
+        return patrolRepository.findByIdAndSiteIdIn(id, siteLookup.siteIdsOf(companyId))
                 .orElseThrow(() -> new ResourceNotFoundException("Patrol not found"));
     }
 
     public Patrol create(UUID companyId, CreatePatrolCommand command) {
-        Site site = siteRepository.findByIdAndCompanyId(command.siteId(), companyId)
-                .orElseThrow(() -> new ResourceNotFoundException("Site not found"));
+        siteLookup.requireSite(companyId, command.siteId());
 
         Patrol patrol = new Patrol();
-        patrol.setSite(site);
+        patrol.setSiteId(command.siteId());
         patrol.setName(command.name());
         patrol.setDescription(command.description());
         patrol.setActive(true);

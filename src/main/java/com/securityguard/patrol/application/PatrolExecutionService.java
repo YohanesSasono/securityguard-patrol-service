@@ -2,17 +2,17 @@ package com.securityguard.patrol.application;
 
 import com.securityguard.patrol.domain.*;
 import com.securityguard.patrol.domain.repository.PatrolExecutionPointRepository;
+import com.securityguard.patrol.application.port.in.PatrolExecutionUseCase;
+import com.securityguard.patrol.application.port.out.SiteLookupPort;
 import com.securityguard.patrol.domain.repository.PatrolExecutionRepository;
 import com.securityguard.patrol.domain.repository.PatrolRoutePointRepository;
 import com.securityguard.patrol.domain.repository.PatrolScheduleRepository;
+import com.securityguard.security.AuthenticatedUser;
+import com.securityguard.security.Role;
 import com.securityguard.shared.exception.BusinessValidationException;
 import com.securityguard.shared.exception.ConflictException;
 import com.securityguard.shared.exception.ForbiddenException;
 import com.securityguard.shared.exception.ResourceNotFoundException;
-import com.securityguard.shared.security.AuthenticatedUser;
-import com.securityguard.shared.security.UserRole;
-import com.securityguard.user.domain.User;
-import com.securityguard.user.domain.UserRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Lazy;
@@ -45,7 +45,7 @@ import java.util.UUID;
  * genuinely goes through the proxy and gets its own transaction.
  */
 @Service
-public class PatrolExecutionService {
+public class PatrolExecutionService implements PatrolExecutionUseCase {
 
     private static final Logger log = LoggerFactory.getLogger(PatrolExecutionService.class);
 
@@ -54,20 +54,20 @@ public class PatrolExecutionService {
     private final PatrolExecutionPointRepository patrolExecutionPointRepository;
     private final PatrolScheduleRepository patrolScheduleRepository;
     private final PatrolRoutePointRepository patrolRoutePointRepository;
-    private final UserRepository userRepository;
+    private final SiteLookupPort siteLookup;
 
     public PatrolExecutionService(@Lazy PatrolExecutionService self,
                                    PatrolExecutionRepository patrolExecutionRepository,
                                    PatrolExecutionPointRepository patrolExecutionPointRepository,
                                    PatrolScheduleRepository patrolScheduleRepository,
                                    PatrolRoutePointRepository patrolRoutePointRepository,
-                                   UserRepository userRepository) {
+                                   SiteLookupPort siteLookup) {
         this.self = self;
         this.patrolExecutionRepository = patrolExecutionRepository;
         this.patrolExecutionPointRepository = patrolExecutionPointRepository;
         this.patrolScheduleRepository = patrolScheduleRepository;
         this.patrolRoutePointRepository = patrolRoutePointRepository;
-        this.userRepository = userRepository;
+        this.siteLookup = siteLookup;
     }
 
     public record VerifyPointCommand(String nfcUid) {
@@ -82,7 +82,7 @@ public class PatrolExecutionService {
 
     @Transactional(readOnly = true)
     public PatrolExecution getById(UUID executionId, UUID companyId, AuthenticatedUser actingUser) {
-        PatrolExecution execution = patrolExecutionRepository.findByIdAndSchedulePatrolSiteCompanyId(executionId, companyId)
+        PatrolExecution execution = patrolExecutionRepository.findByIdAndSchedulePatrolSiteIdIn(executionId, siteLookup.siteIdsOf(companyId))
                 .orElseThrow(() -> new ResourceNotFoundException("Patrol execution not found"));
         assertCanView(execution, actingUser);
         return execution;
@@ -117,10 +117,10 @@ public class PatrolExecutionService {
 
     @Transactional
     protected PatrolExecution startTransactional(UUID scheduleId, UUID companyId, AuthenticatedUser actingUser) {
-        PatrolSchedule schedule = patrolScheduleRepository.findByIdAndPatrolSiteCompanyId(scheduleId, companyId)
+        PatrolSchedule schedule = patrolScheduleRepository.findByIdAndPatrolSiteIdIn(scheduleId, siteLookup.siteIdsOf(companyId))
                 .orElseThrow(() -> new ResourceNotFoundException("Patrol schedule not found"));
 
-        if (!schedule.getAssignedUser().getId().equals(actingUser.userId())) {
+        if (!schedule.getAssignedUserId().equals(actingUser.userId())) {
             throw new ForbiddenException("Only the assigned guard can start this patrol");
         }
 
@@ -137,12 +137,9 @@ public class PatrolExecutionService {
             throw new ConflictException("Schedule is not in a startable state: " + schedule.getStatus());
         }
 
-        User user = userRepository.findByIdAndCompanyId(actingUser.userId(), companyId)
-                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
-
         PatrolExecution execution = new PatrolExecution();
         execution.setSchedule(schedule);
-        execution.setUser(user);
+        execution.setUserId(actingUser.userId()); // the assigned guard, verified above
         execution.setStatus(ExecutionStatus.IN_PROGRESS);
         execution.setStartedAt(Instant.now());
         execution = patrolExecutionRepository.save(execution);
@@ -172,7 +169,7 @@ public class PatrolExecutionService {
     @Transactional(readOnly = true)
     protected PatrolExecution getActiveExecutionOrThrow(UUID scheduleId, UUID companyId) {
         return patrolExecutionRepository.findByScheduleIdAndStatus(scheduleId, ExecutionStatus.IN_PROGRESS)
-                .filter(execution -> execution.getSchedule().getPatrol().getSite().getCompany().getId().equals(companyId))
+                .filter(execution -> siteLookup.siteIdsOf(companyId).contains(execution.getSchedule().getPatrol().getSiteId()))
                 .orElseThrow(() -> new ConflictException(
                         "Concurrent start conflict could not be resolved; please retry"));
     }
@@ -320,16 +317,16 @@ public class PatrolExecutionService {
     @Transactional(readOnly = true)
     protected PatrolExecutionPoint getExecutionPointOrThrow(UUID executionId, UUID pointId, UUID companyId) {
         PatrolExecutionPoint point = findExecutionPoint(executionId, pointId);
-        if (!point.getExecution().getSchedule().getPatrol().getSite().getCompany().getId().equals(companyId)) {
+        if (!siteLookup.siteIdsOf(companyId).contains(point.getExecution().getSchedule().getPatrol().getSiteId())) {
             throw new ResourceNotFoundException("Patrol execution not found");
         }
         return point;
     }
 
     private PatrolExecution loadExecutionForAction(UUID executionId, UUID companyId, AuthenticatedUser actingUser) {
-        PatrolExecution execution = patrolExecutionRepository.findByIdAndSchedulePatrolSiteCompanyId(executionId, companyId)
+        PatrolExecution execution = patrolExecutionRepository.findByIdAndSchedulePatrolSiteIdIn(executionId, siteLookup.siteIdsOf(companyId))
                 .orElseThrow(() -> new ResourceNotFoundException("Patrol execution not found"));
-        if (!execution.getUser().getId().equals(actingUser.userId())) {
+        if (!execution.getUserId().equals(actingUser.userId())) {
             throw new ForbiddenException("Only the assigned guard can update this execution");
         }
         if (execution.getStatus() != ExecutionStatus.IN_PROGRESS) {
@@ -370,10 +367,10 @@ public class PatrolExecutionService {
     }
 
     private void assertCanView(PatrolExecution execution, AuthenticatedUser actingUser) {
-        boolean isOwnExecution = execution.getUser().getId().equals(actingUser.userId());
-        boolean isOversightRole = actingUser.role() == UserRole.CENTRAL_ADMIN
-                || actingUser.role() == UserRole.SITE_ADMIN
-                || actingUser.role() == UserRole.SUPERVISOR;
+        boolean isOwnExecution = execution.getUserId().equals(actingUser.userId());
+        boolean isOversightRole = actingUser.role() == Role.CENTRAL_ADMIN
+                || actingUser.role() == Role.SITE_ADMIN
+                || actingUser.role() == Role.SUPERVISOR;
         if (!isOwnExecution && !isOversightRole) {
             throw new ForbiddenException("You do not have permission to view this execution");
         }

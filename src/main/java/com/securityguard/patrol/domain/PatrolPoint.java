@@ -1,12 +1,13 @@
 package com.securityguard.patrol.domain;
 
-import com.securityguard.shared.entity.AuditableEntity;
-import com.securityguard.site.domain.Site;
+import com.securityguard.persistence.AuditableEntity;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.locationtech.jts.geom.Point;
+
+import java.util.UUID;
 
 /**
  * type = CHECKPOINT | EQUIPMENT. CHECKPOINT requires nfcUid (validated in
@@ -23,9 +24,8 @@ import org.locationtech.jts.geom.Point;
 @NoArgsConstructor
 public class PatrolPoint extends AuditableEntity {
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "site_id", nullable = false)
-    private Site site;
+    @Column(name = "site_id", nullable = false)
+    private UUID siteId;
 
     @Column(name = "name", nullable = false, length = 200)
     private String name;

@@ -1,14 +1,15 @@
 package com.securityguard.patrol.presentation;
 
 import com.securityguard.patrol.application.PatrolPointService;
+import com.securityguard.patrol.application.port.in.PatrolPointUseCase;
 import com.securityguard.patrol.domain.PatrolPoint;
 import com.securityguard.patrol.domain.PatrolPointType;
 import com.securityguard.patrol.presentation.dto.CreatePatrolPointRequest;
 import com.securityguard.patrol.presentation.dto.PatrolPointResponse;
 import com.securityguard.patrol.presentation.dto.UpdatePatrolPointRequest;
 import com.securityguard.shared.exception.BusinessValidationException;
-import com.securityguard.shared.security.AuthenticatedUser;
-import com.securityguard.shared.security.CurrentUserProvider;
+import com.securityguard.security.AuthenticatedUser;
+import com.securityguard.security.CurrentUserProvider;
 import com.securityguard.shared.web.PageResponse;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Pageable;
@@ -25,10 +26,10 @@ import java.util.UUID;
 @RequestMapping("/api/v1/patrol-points")
 public class PatrolPointController {
 
-    private final PatrolPointService patrolPointService;
+    private final PatrolPointUseCase patrolPointService;
     private final CurrentUserProvider currentUserProvider;
 
-    public PatrolPointController(PatrolPointService patrolPointService, CurrentUserProvider currentUserProvider) {
+    public PatrolPointController(PatrolPointUseCase patrolPointService, CurrentUserProvider currentUserProvider) {
         this.patrolPointService = patrolPointService;
         this.currentUserProvider = currentUserProvider;
     }

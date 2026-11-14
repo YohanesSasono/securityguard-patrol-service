@@ -2,12 +2,13 @@ package com.securityguard.patrol.application;
 
 import com.securityguard.patrol.domain.*;
 import com.securityguard.patrol.domain.repository.PatrolRepository;
+import com.securityguard.patrol.application.port.in.PatrolScheduleUseCase;
+import com.securityguard.patrol.application.port.out.SiteLookupPort;
+import com.securityguard.patrol.application.port.out.UserLookupPort;
 import com.securityguard.patrol.domain.repository.PatrolRouteRepository;
 import com.securityguard.patrol.domain.repository.PatrolScheduleRepository;
 import com.securityguard.shared.exception.BusinessValidationException;
 import com.securityguard.shared.exception.ResourceNotFoundException;
-import com.securityguard.user.domain.User;
-import com.securityguard.user.domain.UserRepository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -25,21 +26,24 @@ import java.util.UUID;
  */
 @Service
 @Transactional
-public class PatrolScheduleService {
+public class PatrolScheduleService implements PatrolScheduleUseCase {
 
     private final PatrolScheduleRepository patrolScheduleRepository;
     private final PatrolRepository patrolRepository;
     private final PatrolRouteRepository patrolRouteRepository;
-    private final UserRepository userRepository;
+    private final SiteLookupPort siteLookup;
+    private final UserLookupPort userLookup;
 
     public PatrolScheduleService(PatrolScheduleRepository patrolScheduleRepository,
                                   PatrolRepository patrolRepository,
                                   PatrolRouteRepository patrolRouteRepository,
-                                  UserRepository userRepository) {
+                                  SiteLookupPort siteLookup,
+                                  UserLookupPort userLookup) {
         this.patrolScheduleRepository = patrolScheduleRepository;
         this.patrolRepository = patrolRepository;
         this.patrolRouteRepository = patrolRouteRepository;
-        this.userRepository = userRepository;
+        this.siteLookup = siteLookup;
+        this.userLookup = userLookup;
     }
 
     public record CreateScheduleCommand(UUID patrolId, UUID routeId, UUID assignedUserId,
@@ -52,36 +56,36 @@ public class PatrolScheduleService {
 
     @Transactional(readOnly = true)
     public Page<PatrolSchedule> list(UUID companyId, Pageable pageable) {
-        return patrolScheduleRepository.findByPatrolSiteCompanyId(companyId, pageable);
+        return patrolScheduleRepository.findByPatrolSiteIdIn(siteLookup.siteIdsOf(companyId), pageable);
     }
 
     @Transactional(readOnly = true)
     public Page<PatrolSchedule> listForUser(UUID userId, UUID companyId, Pageable pageable) {
-        return patrolScheduleRepository.findByAssignedUserIdAndPatrolSiteCompanyId(userId, companyId, pageable);
+        return patrolScheduleRepository.findByAssignedUserIdAndPatrolSiteIdIn(userId, siteLookup.siteIdsOf(companyId), pageable);
     }
 
     @Transactional(readOnly = true)
     public PatrolSchedule getById(UUID id, UUID companyId) {
-        return patrolScheduleRepository.findByIdAndPatrolSiteCompanyId(id, companyId)
+        return patrolScheduleRepository.findByIdAndPatrolSiteIdIn(id, siteLookup.siteIdsOf(companyId))
                 .orElseThrow(() -> new ResourceNotFoundException("Patrol schedule not found"));
     }
 
     public PatrolSchedule create(UUID companyId, CreateScheduleCommand command) {
-        Patrol patrol = patrolRepository.findByIdAndSiteCompanyId(command.patrolId(), companyId)
+        var siteIds = siteLookup.siteIdsOf(companyId);
+        Patrol patrol = patrolRepository.findByIdAndSiteIdIn(command.patrolId(), siteIds)
                 .orElseThrow(() -> new ResourceNotFoundException("Patrol not found"));
-        PatrolRoute route = patrolRouteRepository.findByIdAndSiteCompanyId(command.routeId(), companyId)
+        PatrolRoute route = patrolRouteRepository.findByIdAndSiteIdIn(command.routeId(), siteIds)
                 .orElseThrow(() -> new ResourceNotFoundException("Patrol route not found"));
-        User assignedUser = userRepository.findByIdAndCompanyId(command.assignedUserId(), companyId)
-                .orElseThrow(() -> new ResourceNotFoundException("Assigned user not found"));
+        userLookup.requireMember(companyId, command.assignedUserId());
 
-        if (!patrol.getSite().getId().equals(route.getSite().getId())) {
+        if (!patrol.getSiteId().equals(route.getSiteId())) {
             throw new BusinessValidationException("Patrol and route must belong to the same site");
         }
 
         PatrolSchedule schedule = new PatrolSchedule();
         schedule.setPatrol(patrol);
         schedule.setRoute(route);
-        schedule.setAssignedUser(assignedUser);
+        schedule.setAssignedUserId(command.assignedUserId());
         schedule.setScheduledDate(command.scheduledDate());
         schedule.setStartTime(command.startTime());
         schedule.setEndTime(command.endTime());
@@ -93,9 +97,8 @@ public class PatrolScheduleService {
         PatrolSchedule schedule = getById(id, companyId);
 
         if (command.assignedUserId() != null) {
-            User assignedUser = userRepository.findByIdAndCompanyId(command.assignedUserId(), companyId)
-                    .orElseThrow(() -> new ResourceNotFoundException("Assigned user not found"));
-            schedule.setAssignedUser(assignedUser);
+            userLookup.requireMember(companyId, command.assignedUserId());
+            schedule.setAssignedUserId(command.assignedUserId());
         }
         if (command.scheduledDate() != null) {
             schedule.setScheduledDate(command.scheduledDate());

@@ -1,5 +1,7 @@
 package com.securityguard.patrol.presentation.dto;
 
+import com.securityguard.patrol.domain.PatrolExecutionPoint;
+
 import java.time.Instant;
 import java.util.UUID;
 
